@@ -5,6 +5,10 @@ import random
 import numpy as np
 from typing import Dict, List, Tuple, Any
 
+# Import audio nodes
+from .audio_nodes import NODE_CLASS_MAPPINGS as AUDIO_NODE_CLASS_MAPPINGS
+from .audio_nodes import NODE_DISPLAY_NAME_MAPPINGS as AUDIO_NODE_DISPLAY_NAME_MAPPINGS
+
 class NetworkBending:
     """
     Network Bending Node - Performs various modifications on neural network models
@@ -321,11 +325,17 @@ NODE_CLASS_MAPPINGS = {
     "ModelMixer": ModelMixer,
 }
 
+# Add audio nodes to the mappings
+NODE_CLASS_MAPPINGS.update(AUDIO_NODE_CLASS_MAPPINGS)
+
 NODE_DISPLAY_NAME_MAPPINGS = {
     "NetworkBending": "Network Bending",
     "NetworkBendingAdvanced": "Network Bending (Advanced)",
     "ModelMixer": "Model Mixer",
 }
+
+# Add audio node display names
+NODE_DISPLAY_NAME_MAPPINGS.update(AUDIO_NODE_DISPLAY_NAME_MAPPINGS)
 
 # Export web directory for UI components
 WEB_DIRECTORY = "./js"
