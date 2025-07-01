@@ -1,0 +1,219 @@
+{
+  "last_node_id": 10,
+  "last_link_id": 12,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadAudio",
+      "pos": [100, 100],
+      "size": [300, 100],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [1, 2]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": ["content_audio.wav"]
+    },
+    {
+      "id": 2,
+      "type": "LoadAudio",
+      "pos": [100, 250],
+      "size": [300, 100],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [3]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": ["style_audio.wav"]
+    },
+    {
+      "id": 3,
+      "type": "LoadVAE",
+      "pos": [100, 400],
+      "size": [300, 100],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [4, 5, 6]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadVAE"
+      },
+      "widgets_values": ["stable_audio_vae.safetensors"]
+    },
+    {
+      "id": 4,
+      "type": "AudioVAEEncode",
+      "pos": [450, 100],
+      "size": [300, 150],
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 1
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "AUDIO_LATENT",
+          "links": [7]
+        },
+        {
+          "name": "info",
+          "type": "LATENT_INFO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AudioVAEEncode"
+      },
+      "widgets_values": [true, 44100]
+    },
+    {
+      "id": 5,
+      "type": "AudioVAEEncode",
+      "pos": [450, 300],
+      "size": [300, 150],
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "AUDIO_LATENT",
+          "links": [8]
+        },
+        {
+          "name": "info",
+          "type": "LATENT_INFO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AudioVAEEncode"
+      },
+      "widgets_values": [true, 44100]
+    },
+    {
+      "id": 6,
+      "type": "AudioStyleTransfer",
+      "pos": [800, 200],
+      "size": [350, 200],
+      "inputs": [
+        {
+          "name": "content_latent",
+          "type": "AUDIO_LATENT",
+          "link": 7
+        },
+        {
+          "name": "style_latent",
+          "type": "AUDIO_LATENT",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "AUDIO_LATENT",
+          "links": [9]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AudioStyleTransfer"
+      },
+      "widgets_values": ["adaptive", 0.7, 0.3, 4]
+    },
+    {
+      "id": 7,
+      "type": "AudioVAEDecode",
+      "pos": [1200, 200],
+      "size": [300, 150],
+      "inputs": [
+        {
+          "name": "latent",
+          "type": "AUDIO_LATENT",
+          "link": 9
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [10]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AudioVAEDecode"
+      },
+      "widgets_values": [true]
+    },
+    {
+      "id": 8,
+      "type": "SaveAudio",
+      "pos": [1550, 200],
+      "size": [300, 100],
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 10
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveAudio"
+      },
+      "widgets_values": ["styled_output.wav"]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 4, 0, "AUDIO"],
+    [2, 1, 0, 9, 0, "AUDIO"],
+    [3, 2, 0, 5, 0, "AUDIO"],
+    [4, 3, 0, 4, 1, "VAE"],
+    [5, 3, 0, 5, 1, "VAE"],
+    [6, 3, 0, 7, 1, "VAE"],
+    [7, 4, 0, 6, 0, "AUDIO_LATENT"],
+    [8, 5, 0, 6, 1, "AUDIO_LATENT"],
+    [9, 6, 0, 7, 0, "AUDIO_LATENT"],
+    [10, 7, 0, 8, 0, "AUDIO"]
+  ],
+  "config": {},
+  "groups": [],
+  "version": 1,
+  "workflow": {
+    "name": "Audio Style Transfer",
+    "description": "Transfer audio style characteristics from one audio to another using latent space manipulation"
+  }
+}
