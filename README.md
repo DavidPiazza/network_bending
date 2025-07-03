@@ -1,48 +1,15 @@
 # Network Bending for ComfyUI
 
-A comprehensive custom node pack for ComfyUI that enables creative manipulation and "bending" of neural network models, including both image and audio models. Inspired by circuit bending techniques in electronic music, this package allows you to creatively corrupt, modify, and blend neural networks to create unique and experimental effects.
-
-## Overview
-
-Network Bending brings the concept of circuit bending to AI models. Just as circuit bending involves creatively short-circuiting electronic devices to create new sounds, network bending involves modifying neural network weights and architectures to create unexpected and artistic outputs. This package supports both Stable Diffusion image models and Stable Audio models.
-
-## Project Structure
-
-```
-network_bending/
-├── src/network_bending/
-│   ├── nodes.py                    # Core network bending nodes
-│   ├── audio_nodes/               # Audio-specific nodes
-│   │   ├── audio_latent_nodes.py # Audio VAE and latent manipulation
-│   │   ├── audio_style_transfer.py # Audio style transfer capabilities
-│   │   └── README.md              # Audio nodes documentation
-│   ├── audio_workflows/           # Pre-built audio workflows
-│   └── js/                        # UI components
-│       └── network_bending.js     # Custom UI with visual feedback
-├── examples/
-│   └── basic_workflow.json        # Example ComfyUI workflow
-├── tests/                         # Test suite
-├── requirements-audio.txt         # Audio processing dependencies
-└── pyproject.toml                 # Modern Python packaging
-```
+A custom node pack for ComfyUI that enables the creative manipulation of generative models. Allows you to corrupt, modify, and blend neural networks.
 
 ## Features
 
-### Core Network Bending Nodes
-
-#### Network Bending Node
-The main node for applying various network bending operations to image models:
-
-- **Add Noise**: Inject Gaussian noise into model weights for subtle variations
+- **Add Noise**: Inject Gaussian noise into model weights
 - **Scale Weights**: Scale model weights up or down to amplify or dampen features
-- **Prune Weights**: Remove small weights for sparsification and efficiency
-- **Randomize Weights**: Replace portions of weights with random values for chaos
-- **Smooth Weights**: Apply spatial smoothing to weight matrices for softer outputs
-- **Quantize Weights**: Reduce weight precision to discrete levels for lo-fi effects
-
-#### Network Bending Advanced Node
-Advanced operations for more complex manipulations:
-
+- **Prune Weights**: Remove small weights for sparsification
+- **Randomize Weights**: Replace portions of weights with random values
+- **Smooth Weights**: Apply spatial smoothing to weight matrices
+- **Quantize Weights**: Reduce weight precision to discrete levels
 - **Layer Swap**: Swap weights between similar layers
 - **Activation Replace**: Replace activation functions
 - **Weight Transpose**: Transpose weight matrices
@@ -50,9 +17,7 @@ Advanced operations for more complex manipulations:
 - **Frequency Filter**: Apply frequency domain filtering
 - **Weight Clustering**: Group similar weights together
 
-#### Model Mixer Node
 Mix two models together with various blending modes:
-
 - **Linear Interpolation**: Simple weighted average of weights
 - **Weighted Sum**: Weighted sum with normalization
 - **Layer-wise Mix**: Different mix ratios for different layers
@@ -61,7 +26,7 @@ Mix two models together with various blending modes:
 
 ### Audio Processing Nodes
 
-The package includes comprehensive audio processing capabilities for Stable Audio models:
+The package also includes comprehensive audio processing capabilities for Stable Audio models:
 
 #### Audio VAE Nodes
 - **Audio VAE Encode**: Encode audio waveforms into latent space
@@ -78,16 +43,6 @@ The package includes comprehensive audio processing capabilities for Stable Audi
 - **Audio Latent Guidance**: Guide generation with reference audio
 - **Audio Reference Encoder**: Encode reference audio for style transfer
 
-### UI Features
-
-The package includes custom JavaScript UI components that provide:
-
-- **Visual Feedback**: Real-time display of modified layers and operation results
-- **Help System**: Built-in help buttons with detailed information
-- **Color Coding**: Different node types have distinct colors for easy identification
-- **Operation Preview**: See which layers will be affected before applying
-- **Progress Tracking**: Monitor long-running operations
-
 ## Installation
 
 ### Basic Installation
@@ -100,17 +55,6 @@ git clone https://github.com/DavidPiazza/network_bending.git
 
 2. Restart ComfyUI
 
-### Basic Network Bending for Images
-
-1. Load a model checkpoint using the standard ComfyUI loader nodes
-2. Add a "Network Bending" node to your workflow
-3. Connect the MODEL output to the Network Bending input
-4. Configure parameters:
-   - **Operation**: Select the type of bending operation
-   - **Intensity**: Control the strength (0.0 = no effect, 1.0 = maximum)
-   - **Target Layers**: Specify which layers to modify (e.g., "conv", "attention", or "all")
-   - **Seed**: Set for reproducible results (-1 for random)
-
 ### Audio Network Bending
 
 1. **Load an audio model** (e.g., Stable Audio VAE)
@@ -119,20 +63,8 @@ git clone https://github.com/DavidPiazza/network_bending.git
 4. **Apply bending operations** to the audio latents
 5. **Decode back to audio** using Audio VAE Decode
 
-#### Layered Bending
-Chain multiple bending operations with different intensities:
-```
-Model → Smooth (0.1) → Add Noise (0.05) → Quantize (0.3) → Output
-```
-
 #### Cross-Modal Bending
 Apply image model bending techniques to audio models or vice versa for experimental results.
-
-#### Targeted Corruption
-Use specific layer patterns to corrupt only certain aspects:
-- `"transformer"` - Target transformer blocks
-- `"resnet"` - Target ResNet blocks
-- `"unet"` - Target U-Net components
 
 ## License
 
