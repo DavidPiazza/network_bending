@@ -2,11 +2,11 @@
 
 A comprehensive custom node pack for ComfyUI that enables creative manipulation and "bending" of neural network models, including both image and audio models. Inspired by circuit bending techniques in electronic music, this package allows you to creatively corrupt, modify, and blend neural networks to create unique and experimental effects.
 
-## 🎯 Overview
+## Overview
 
 Network Bending brings the concept of circuit bending to AI models. Just as circuit bending involves creatively short-circuiting electronic devices to create new sounds, network bending involves modifying neural network weights and architectures to create unexpected and artistic outputs. This package supports both Stable Diffusion image models and Stable Audio models.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 network_bending/
@@ -26,9 +26,9 @@ network_bending/
 └── pyproject.toml                 # Modern Python packaging
 ```
 
-## 🚀 Features
+## Features
 
-### 🎛️ Core Network Bending Nodes
+### Core Network Bending Nodes
 
 #### Network Bending Node
 The main node for applying various network bending operations to image models:
@@ -59,7 +59,7 @@ Mix two models together with various blending modes:
 - **Frequency Blend**: Mix models in frequency domain
 - **Random Mix**: Randomly select weights from either model
 
-### 🎵 Audio Processing Nodes
+### Audio Processing Nodes
 
 The package includes comprehensive audio processing capabilities for Stable Audio models:
 
@@ -78,7 +78,7 @@ The package includes comprehensive audio processing capabilities for Stable Audi
 - **Audio Latent Guidance**: Guide generation with reference audio
 - **Audio Reference Encoder**: Encode reference audio for style transfer
 
-### 🎨 UI Features
+### UI Features
 
 The package includes custom JavaScript UI components that provide:
 
@@ -88,7 +88,7 @@ The package includes custom JavaScript UI components that provide:
 - **Operation Preview**: See which layers will be affected before applying
 - **Progress Tracking**: Monitor long-running operations
 
-## 📦 Installation
+## Installation
 
 ### Basic Installation
 
@@ -125,7 +125,7 @@ Optional audio dependencies for extended format support:
 - audioread >= 3.0.0
 - resampy >= 0.4.0
 
-## 📖 Usage Guide
+## Usage Guide
 
 ### Basic Network Bending for Images
 
@@ -168,7 +168,7 @@ Use specific layer patterns to corrupt only certain aspects:
 - `"resnet"` - Target ResNet blocks
 - `"unet"` - Target U-Net components
 
-## 🔧 Technical Details
+## Technical Details
 
 ### Architecture
 
@@ -194,7 +194,7 @@ The package is built with a modular architecture:
 - Batch processing supported for efficiency
 - Automatic memory management for large models
 
-## 🧪 Development
+## Development
 
 ### Running Tests
 
@@ -220,14 +220,14 @@ Contributions are welcome! Please:
 4. Ensure all tests pass
 5. Submit a pull request
 
-## 📝 Examples and Workflows
+## Examples and Workflows
 
 Check the `examples/` directory for pre-built workflows:
 
 - `basic_workflow.json`: Simple network bending setup
 - Audio workflows available in `src/network_bending/audio_workflows/`
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 - **No effect visible**: Increase intensity or check target_layers pattern
 - **Model breaks completely**: Reduce intensity or target fewer layers
@@ -239,25 +239,12 @@ Check the `examples/` directory for pre-built workflows:
 - **Format not supported**: Install optional dependencies (soundfile, audioread)
 - **Memory issues with long audio**: Process in chunks or reduce sample rate
 
-## 📄 License
+## License
 
 This project is licensed under the GNU General Public License v3 (GPL-3.0) - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - ComfyUI team for the excellent framework
-- Inspired by circuit bending and glitch art techniques
-- Stable Audio team for audio model support
-- The creative coding and AI art community
-
-## 📬 Contact
-
-- **Author**: David Piazza
-- **Email**: david.piazza@umontreal.ca
-- **GitHub**: https://github.com/DavidPiazza/network_bending
-- **Issues**: https://github.com/DavidPiazza/network_bending/issues
-
----
-
-*Network Bending: Where AI meets glitch art* 🎨🤖
+- Anthropic for Opus 4 and Claude Code
 
