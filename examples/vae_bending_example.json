@@ -1,0 +1,184 @@
+{
+  "last_node_id": 15,
+  "last_link_id": 17,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderSimple",
+      "pos": [50, 50],
+      "size": {"0": 315, "1": 98},
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [1], "slot_index": 1},
+        {"name": "VAE", "type": "VAE", "links": [2, 3], "slot_index": 2}
+      ],
+      "properties": {"Node name for S&R": "CheckpointLoaderSimple"},
+      "widgets_values": ["sd_xl_base_1.0.safetensors"]
+    },
+    {
+      "id": 2,
+      "type": "VAENetworkBending",
+      "pos": [400, 200],
+      "size": {"0": 315, "1": 166},
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {"name": "vae", "type": "VAE", "link": 2}
+      ],
+      "outputs": [
+        {"name": "vae", "type": "VAE", "links": [4], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "VAENetworkBending"},
+      "widgets_values": ["add_noise", 0.1, "decoder", true, -1]
+    },
+    {
+      "id": 3,
+      "type": "CLIPTextEncode",
+      "pos": [400, 50],
+      "size": {"0": 400, "1": 140},
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {"name": "clip", "type": "CLIP", "link": 1}
+      ],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [5], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["a beautiful landscape with mountains and lakes"]
+    },
+    {
+      "id": 4,
+      "type": "LoadImage",
+      "pos": [50, 250],
+      "size": {"0": 315, "1": 314},
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [6], "slot_index": 0},
+        {"name": "MASK", "type": "MASK", "links": null}
+      ],
+      "properties": {"Node name for S&R": "LoadImage"},
+      "widgets_values": ["example.png", "image"]
+    },
+    {
+      "id": 5,
+      "type": "VAEEncode",
+      "pos": [750, 250],
+      "size": {"0": 210, "1": 46},
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {"name": "pixels", "type": "IMAGE", "link": 6},
+        {"name": "vae", "type": "VAE", "link": 4}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [7, 8], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "VAEEncode"}
+    },
+    {
+      "id": 6,
+      "type": "VAELatentBending",
+      "pos": [1000, 250],
+      "size": {"0": 315, "1": 142},
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {"name": "samples", "type": "LATENT", "link": 7}
+      ],
+      "outputs": [
+        {"name": "samples", "type": "LATENT", "links": [9], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "VAELatentBending"},
+      "widgets_values": ["frequency_filter", 0.3, false, "0,1,2,3"]
+    },
+    {
+      "id": 7,
+      "type": "VAEChannelManipulator",
+      "pos": [1350, 250],
+      "size": {"0": 315, "1": 118},
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {"name": "samples", "type": "LATENT", "link": 9},
+        {"name": "reference_latent", "type": "LATENT", "link": 8}
+      ],
+      "outputs": [
+        {"name": "samples", "type": "LATENT", "links": [10], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "VAEChannelManipulator"},
+      "widgets_values": ["channel_attention", 0.5, true]
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "pos": [1700, 250],
+      "size": {"0": 210, "1": 46},
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {"name": "samples", "type": "LATENT", "link": 10},
+        {"name": "vae", "type": "VAE", "link": 3}
+      ],
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [11], "slot_index": 0}
+      ],
+      "properties": {"Node name for S&R": "VAEDecode"}
+    },
+    {
+      "id": 9,
+      "type": "SaveImage",
+      "pos": [1950, 250],
+      "size": {"0": 315, "1": 270},
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {"name": "images", "type": "IMAGE", "link": 11}
+      ],
+      "properties": {"Node name for S&R": "SaveImage"},
+      "widgets_values": ["ComfyUI"]
+    },
+    {
+      "id": 10,
+      "type": "Note",
+      "pos": [50, 600],
+      "size": {"0": 400, "1": 200},
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "properties": {"text": ""},
+      "widgets_values": ["VAE Network Bending Example\n\nThis workflow demonstrates:\n1. VAENetworkBending - Adds noise to decoder\n2. VAELatentBending - Applies frequency filtering\n3. VAEChannelManipulator - Applies channel attention\n\nTry different operations and intensities to see how they affect the output!"],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [1, 1, 1, 3, 0, "CLIP"],
+    [2, 1, 2, 2, 0, "VAE"],
+    [3, 1, 2, 8, 1, "VAE"],
+    [4, 2, 0, 5, 1, "VAE"],
+    [5, 3, 0, null, null, "CONDITIONING"],
+    [6, 4, 0, 5, 0, "IMAGE"],
+    [7, 5, 0, 6, 0, "LATENT"],
+    [8, 5, 0, 7, 1, "LATENT"],
+    [9, 6, 0, 7, 0, "LATENT"],
+    [10, 7, 0, 8, 0, "LATENT"],
+    [11, 8, 0, 9, 0, "IMAGE"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+} 
