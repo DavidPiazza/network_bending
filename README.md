@@ -100,33 +100,6 @@ git clone https://github.com/DavidPiazza/network_bending.git
 
 2. Restart ComfyUI
 
-### For Audio Features
-
-If you want to use the audio processing nodes, install additional dependencies:
-
-```bash
-cd ComfyUI/custom_nodes/network_bending
-pip install -r requirements-audio.txt
-```
-
-### Dependencies
-
-Core dependencies (automatically installed):
-- PyTorch >= 2.0.0
-- NumPy >= 1.21.0
-
-Audio dependencies (optional):
-- torchaudio >= 2.0.0
-- librosa >= 0.10.0
-- scipy >= 1.7.0
-
-Optional audio dependencies for extended format support:
-- soundfile >= 0.12.0
-- audioread >= 3.0.0
-- resampy >= 0.4.0
-
-## Usage Guide
-
 ### Basic Network Bending for Images
 
 1. Load a model checkpoint using the standard ComfyUI loader nodes
@@ -146,13 +119,6 @@ Optional audio dependencies for extended format support:
 4. **Apply bending operations** to the audio latents
 5. **Decode back to audio** using Audio VAE Decode
 
-Example audio workflow:
-```
-Audio Input → Audio VAE Encode → Audio Latent Manipulator → Audio VAE Decode → Audio Output
-```
-
-### Advanced Techniques
-
 #### Layered Bending
 Chain multiple bending operations with different intensities:
 ```
@@ -168,83 +134,8 @@ Use specific layer patterns to corrupt only certain aspects:
 - `"resnet"` - Target ResNet blocks
 - `"unet"` - Target U-Net components
 
-## Technical Details
-
-### Architecture
-
-The package is built with a modular architecture:
-
-1. **Core Bending Engine**: Base operations that work on any PyTorch model
-2. **Model Adapters**: Specific handling for ComfyUI model wrappers
-3. **Operation Library**: Extensible set of bending operations
-4. **UI Integration**: Real-time feedback through ComfyUI's server
-
-### Implementation Notes
-
-- All operations clone the model to avoid modifying the original
-- Supports both CPU and GPU operations
-- Memory-efficient implementations for large models
-- Thread-safe for parallel processing
-- Preserves model metadata and configurations
-
-### Performance Considerations
-
-- Operations scale with model size
-- GPU recommended for real-time feedback
-- Batch processing supported for efficiency
-- Automatic memory management for large models
-
-## Development
-
-### Running Tests
-
-```bash
-pytest tests/
-```
-
-### Code Quality
-
-The project uses:
-- `ruff` for linting
-- `mypy` for type checking
-- `pre-commit` hooks for code quality
-- `black` for code formatting
-
-### Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new features
-4. Ensure all tests pass
-5. Submit a pull request
-
-## Examples and Workflows
-
-Check the `examples/` directory for pre-built workflows:
-
-- `basic_workflow.json`: Simple network bending setup
-- Audio workflows available in `src/network_bending/audio_workflows/`
-
-## Troubleshooting
-
-- **No effect visible**: Increase intensity or check target_layers pattern
-- **Model breaks completely**: Reduce intensity or target fewer layers
-- **Out of memory**: Operations clone the model, ensure sufficient VRAM
-
-### Audio-Specific Issues
-
-- **No audio output**: Check audio dependencies are installed
-- **Format not supported**: Install optional dependencies (soundfile, audioread)
-- **Memory issues with long audio**: Process in chunks or reduce sample rate
-
 ## License
 
 This project is licensed under the GNU General Public License v3 (GPL-3.0) - see the LICENSE file for details.
 
-## Acknowledgments
-
-- ComfyUI team for the excellent framework
-- Anthropic for Opus 4 and Claude Code
-
+## 
