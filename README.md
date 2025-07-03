@@ -1,30 +1,56 @@
 # Network Bending for ComfyUI
 
-A custom node pack for ComfyUI that enables creative manipulation and "bending" of neural network models. Perform various operations on loaded model checkpoints to create unique and experimental effects.
+A comprehensive custom node pack for ComfyUI that enables creative manipulation and "bending" of neural network models, including both image and audio models. Inspired by circuit bending techniques in electronic music, this package allows you to creatively corrupt, modify, and blend neural networks to create unique and experimental effects.
 
-## Features
+## 🎯 Overview
 
-### 🎛️ Network Bending Node
-The main node for applying various network bending operations:
+Network Bending brings the concept of circuit bending to AI models. Just as circuit bending involves creatively short-circuiting electronic devices to create new sounds, network bending involves modifying neural network weights and architectures to create unexpected and artistic outputs. This package supports both Stable Diffusion image models and Stable Audio models.
 
-- **Add Noise**: Inject Gaussian noise into model weights
-- **Scale Weights**: Scale model weights up or down
-- **Prune Weights**: Remove small weights (sparsification)
-- **Randomize Weights**: Replace portions of weights with random values
-- **Smooth Weights**: Apply spatial smoothing to weight matrices
-- **Quantize Weights**: Reduce weight precision to discrete levels
+## 📁 Project Structure
 
-### 🔧 Network Bending Advanced Node
+```
+network_bending/
+├── src/network_bending/
+│   ├── nodes.py                    # Core network bending nodes
+│   ├── audio_nodes/               # Audio-specific nodes
+│   │   ├── audio_latent_nodes.py # Audio VAE and latent manipulation
+│   │   ├── audio_style_transfer.py # Audio style transfer capabilities
+│   │   └── README.md              # Audio nodes documentation
+│   ├── audio_workflows/           # Pre-built audio workflows
+│   └── js/                        # UI components
+│       └── network_bending.js     # Custom UI with visual feedback
+├── examples/
+│   └── basic_workflow.json        # Example ComfyUI workflow
+├── tests/                         # Test suite
+├── requirements-audio.txt         # Audio processing dependencies
+└── pyproject.toml                 # Modern Python packaging
+```
+
+## 🚀 Features
+
+### 🎛️ Core Network Bending Nodes
+
+#### Network Bending Node
+The main node for applying various network bending operations to image models:
+
+- **Add Noise**: Inject Gaussian noise into model weights for subtle variations
+- **Scale Weights**: Scale model weights up or down to amplify or dampen features
+- **Prune Weights**: Remove small weights for sparsification and efficiency
+- **Randomize Weights**: Replace portions of weights with random values for chaos
+- **Smooth Weights**: Apply spatial smoothing to weight matrices for softer outputs
+- **Quantize Weights**: Reduce weight precision to discrete levels for lo-fi effects
+
+#### Network Bending Advanced Node
 Advanced operations for more complex manipulations:
 
 - **Layer Swap**: Swap weights between similar layers
 - **Activation Replace**: Replace activation functions
 - **Weight Transpose**: Transpose weight matrices
-- **Channel Shuffle**: Randomly shuffle channels in conv layers
+- **Channel Shuffle**: Randomly shuffle channels in convolutional layers
 - **Frequency Filter**: Apply frequency domain filtering
 - **Weight Clustering**: Group similar weights together
 
-### 🎨 Model Mixer Node
+#### Model Mixer Node
 Mix two models together with various blending modes:
 
 - **Linear Interpolation**: Simple weighted average of weights
@@ -33,25 +59,75 @@ Mix two models together with various blending modes:
 - **Frequency Blend**: Mix models in frequency domain
 - **Random Mix**: Randomly select weights from either model
 
-## Installation
+### 🎵 Audio Processing Nodes
+
+The package includes comprehensive audio processing capabilities for Stable Audio models:
+
+#### Audio VAE Nodes
+- **Audio VAE Encode**: Encode audio waveforms into latent space
+- **Audio VAE Decode**: Decode latent representations back to audio
+
+#### Audio Latent Manipulation
+- **Audio Latent Interpolate**: Smoothly interpolate between audio latents
+- **Audio Latent Blend**: Blend multiple audio latents with various modes
+- **Audio Latent Manipulator**: Direct manipulation of audio latent features
+- **Audio Feature Extractor**: Extract specific features from audio latents
+
+#### Audio Style Transfer
+- **Audio Style Transfer**: Transfer style from one audio to another
+- **Audio Latent Guidance**: Guide generation with reference audio
+- **Audio Reference Encoder**: Encode reference audio for style transfer
+
+### 🎨 UI Features
+
+The package includes custom JavaScript UI components that provide:
+
+- **Visual Feedback**: Real-time display of modified layers and operation results
+- **Help System**: Built-in help buttons with detailed information
+- **Color Coding**: Different node types have distinct colors for easy identification
+- **Operation Preview**: See which layers will be affected before applying
+- **Progress Tracking**: Monitor long-running operations
+
+## 📦 Installation
+
+### Basic Installation
 
 1. Clone this repository into your ComfyUI `custom_nodes` directory:
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/yourusername/network_bending.git
+git clone https://github.com/DavidPiazza/network_bending.git
 ```
 
-2. Install dependencies (if any):
+2. Restart ComfyUI
+
+### For Audio Features
+
+If you want to use the audio processing nodes, install additional dependencies:
+
 ```bash
-cd network_bending
-pip install -r requirements.txt  # if requirements.txt exists
+cd ComfyUI/custom_nodes/network_bending
+pip install -r requirements-audio.txt
 ```
 
-3. Restart ComfyUI
+### Dependencies
 
-## Usage
+Core dependencies (automatically installed):
+- PyTorch >= 2.0.0
+- NumPy >= 1.21.0
 
-### Basic Network Bending
+Audio dependencies (optional):
+- torchaudio >= 2.0.0
+- librosa >= 0.10.0
+- scipy >= 1.7.0
+
+Optional audio dependencies for extended format support:
+- soundfile >= 0.12.0
+- audioread >= 3.0.0
+- resampy >= 0.4.0
+
+## 📖 Usage Guide
+
+### Basic Network Bending for Images
 
 1. Load a model checkpoint using the standard ComfyUI loader nodes
 2. Add a "Network Bending" node to your workflow
@@ -62,93 +138,126 @@ pip install -r requirements.txt  # if requirements.txt exists
    - **Target Layers**: Specify which layers to modify (e.g., "conv", "attention", or "all")
    - **Seed**: Set for reproducible results (-1 for random)
 
-### Layer Targeting
+### Audio Network Bending
 
-You can target specific layers using patterns:
-- `all` - Modify all layers
-- `conv` - Target convolutional layers
-- `attention` - Target attention layers
-- `linear` - Target linear/dense layers
-- `norm` - Target normalization layers
-- `embedding` - Target embedding layers
-- Combine patterns with commas: `conv,attention`
+1. **Load an audio model** (e.g., Stable Audio VAE)
+2. **Add audio processing nodes** from the network_bending/audio category
+3. **Connect audio inputs** either from file loaders or generated audio
+4. **Apply bending operations** to the audio latents
+5. **Decode back to audio** using Audio VAE Decode
 
-### Model Mixing
+Example audio workflow:
+```
+Audio Input → Audio VAE Encode → Audio Latent Manipulator → Audio VAE Decode → Audio Output
+```
 
-1. Load two model checkpoints
-2. Add a "Model Mixer" node
-3. Connect both models to the mixer inputs
-4. Set the mix mode and ratio
-5. Connect the output to your generation pipeline
+### Advanced Techniques
 
-## Parameters
+#### Layered Bending
+Chain multiple bending operations with different intensities:
+```
+Model → Smooth (0.1) → Add Noise (0.05) → Quantize (0.3) → Output
+```
 
-### Network Bending Node
+#### Cross-Modal Bending
+Apply image model bending techniques to audio models or vice versa for experimental results.
 
-| Parameter | Type | Description | Range |
-|-----------|------|-------------|-------|
-| operation | Select | Type of bending operation | See operations list |
-| intensity | Float | Strength of the operation | 0.0 - 1.0 |
-| target_layers | String | Layer patterns to target | Comma-separated patterns |
-| seed | Int | Random seed | -1 to 2^63-1 |
+#### Targeted Corruption
+Use specific layer patterns to corrupt only certain aspects:
+- `"transformer"` - Target transformer blocks
+- `"resnet"` - Target ResNet blocks
+- `"unet"` - Target U-Net components
 
-### Model Mixer Node
+## 🔧 Technical Details
 
-| Parameter | Type | Description | Range |
-|-----------|------|-------------|-------|
-| mix_mode | Select | Blending mode | See mix modes list |
-| mix_ratio | Float | Blend ratio | 0.0 - 1.0 |
+### Architecture
 
-## UI Features
+The package is built with a modular architecture:
 
-- **Visual Feedback**: Operations display information about modified layers
-- **Help Buttons**: Click "Layer Patterns Help" or "Operation Info" for detailed information
-- **Color Coding**: Different node types have distinct colors for easy identification
-- **Real-time Updates**: See which layers were modified after each operation
+1. **Core Bending Engine**: Base operations that work on any PyTorch model
+2. **Model Adapters**: Specific handling for ComfyUI model wrappers
+3. **Operation Library**: Extensible set of bending operations
+4. **UI Integration**: Real-time feedback through ComfyUI's server
 
-## Examples
+### Implementation Notes
 
-### Subtle Model Variation
-- Operation: `add_noise`
-- Intensity: `0.05`
-- Target Layers: `attention`
-- Creates subtle variations while preserving model behavior
+- All operations clone the model to avoid modifying the original
+- Supports both CPU and GPU operations
+- Memory-efficient implementations for large models
+- Thread-safe for parallel processing
+- Preserves model metadata and configurations
 
-### Aggressive Glitch Art
-- Operation: `randomize_weights`
-- Intensity: `0.3`
-- Target Layers: `conv`
-- Creates glitchy, unpredictable outputs
+### Performance Considerations
 
-### Model Hybridization
-- Use Model Mixer with `linear_interpolation`
-- Mix Ratio: `0.5`
-- Creates a balanced hybrid of two models
+- Operations scale with model size
+- GPU recommended for real-time feedback
+- Batch processing supported for efficiency
+- Automatic memory management for large models
 
-## Tips
+## 🧪 Development
 
-1. **Start with low intensity values** (0.01-0.1) and increase gradually
-2. **Target specific layers** for more controlled effects
-3. **Use seeds** for reproducible results
-4. **Combine operations** by chaining multiple bending nodes
-5. **Save interesting results** as new model checkpoints
+### Running Tests
 
-## Troubleshooting
+```bash
+pytest tests/
+```
+
+### Code Quality
+
+The project uses:
+- `ruff` for linting
+- `mypy` for type checking
+- `pre-commit` hooks for code quality
+- `black` for code formatting
+
+### Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new features
+4. Ensure all tests pass
+5. Submit a pull request
+
+## 📝 Examples and Workflows
+
+Check the `examples/` directory for pre-built workflows:
+
+- `basic_workflow.json`: Simple network bending setup
+- Audio workflows available in `src/network_bending/audio_workflows/`
+
+## 🐛 Troubleshooting
 
 - **No effect visible**: Increase intensity or check target_layers pattern
 - **Model breaks completely**: Reduce intensity or target fewer layers
 - **Out of memory**: Operations clone the model, ensure sufficient VRAM
 
-## Contributing
+### Audio-Specific Issues
 
-Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+- **No audio output**: Check audio dependencies are installed
+- **Format not supported**: Install optional dependencies (soundfile, audioread)
+- **Memory issues with long audio**: Process in chunks or reduce sample rate
 
-## License
+## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the GNU General Public License v3 (GPL-3.0) - see the LICENSE file for details.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - ComfyUI team for the excellent framework
 - Inspired by circuit bending and glitch art techniques
+- Stable Audio team for audio model support
+- The creative coding and AI art community
+
+## 📬 Contact
+
+- **Author**: David Piazza
+- **Email**: david.piazza@umontreal.ca
+- **GitHub**: https://github.com/DavidPiazza/network_bending
+- **Issues**: https://github.com/DavidPiazza/network_bending/issues
+
+---
+
+*Network Bending: Where AI meets glitch art* 🎨🤖
 
