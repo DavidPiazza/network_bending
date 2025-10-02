@@ -60,7 +60,9 @@ class AudioVAEEncode:
         
         # Normalize audio
         if normalize:
-            waveform = waveform / torch.max(torch.abs(waveform))
+            max_abs = torch.max(torch.abs(waveform))
+            if float(max_abs) > 1e-12:
+                waveform = waveform / max_abs
         
         # Ensure correct shape for VAE (batch, channels, samples)
         if waveform.dim() == 2:
@@ -128,9 +130,8 @@ class AudioVAEDecode:
             # Move to CPU for further processing
             waveform = waveform.cpu()
         
-        # Denormalize if needed
+        # Denormalize if needed (clamp to valid range)
         if denormalize:
-            # Ensure audio is in valid range [-1, 1]
             waveform = torch.clamp(waveform, -1.0, 1.0)
         
         # Extract sample rate (default to 44100 if not stored)
@@ -200,8 +201,8 @@ class AudioLatentInterpolate:
         elif interpolation_mode == "spherical":
             # Spherical linear interpolation (SLERP)
             # Normalize latents
-            latent_a_norm = F.normalize(latent_a.flatten(1), dim=1).reshape(latent_a.shape)
-            latent_b_norm = F.normalize(latent_b.flatten(1), dim=1).reshape(latent_b.shape)
+            latent_a_norm = F.normalize(latent_a.flatten(1), dim=1, eps=1e-6).reshape(latent_a.shape)
+            latent_b_norm = F.normalize(latent_b.flatten(1), dim=1, eps=1e-6).reshape(latent_b.shape)
             
             # Compute angle between latents
             dot_product = (latent_a_norm * latent_b_norm).sum()
@@ -295,10 +296,11 @@ class AudioLatentBlend:
             latents.append(latent_d.to(device))
             weights.append(weight_d)
         
-        # Normalize weights if requested
+        # Normalize weights if requested by the user
         if normalize:
             total_weight = sum(weights)
-            weights = [w / total_weight for w in weights]
+            if abs(total_weight) > 1e-12:
+                weights = [w / total_weight for w in weights]
         
         # Apply blend mode
         if blend_mode == "add":

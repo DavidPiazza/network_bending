@@ -1,5 +1,6 @@
-import { app } from "../../../scripts/app.js";
-import { api } from "../../../scripts/api.js";
+// Use absolute paths as ComfyUI serves these from /scripts
+import { app } from "/scripts/app.js";
+import { api } from "/scripts/api.js";
 
 // Register the network bending extension
 app.registerExtension({
