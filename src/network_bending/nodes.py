@@ -18,6 +18,14 @@ import random
 import numpy as np
 from typing import Dict, List, Tuple, Any
 
+MAX_SEED = (1 << 32) - 1
+
+
+def _normalize_seed(seed: int):
+    if seed == -1:
+        return None
+    return int(seed % (MAX_SEED + 1))
+
 # Import audio nodes
 from .audio_nodes import NODE_CLASS_MAPPINGS as AUDIO_NODE_CLASS_MAPPINGS
 from .audio_nodes import NODE_DISPLAY_NAME_MAPPINGS as AUDIO_NODE_DISPLAY_NAME_MAPPINGS
@@ -66,7 +74,7 @@ class NetworkBending:
                 "seed": ("INT", {
                     "default": -1,
                     "min": -1,
-                    "max": 0xffffffffffffffff,
+                    "max": MAX_SEED,
                     "tooltip": "Random seed for reproducible results (-1 for random)"
                 }),
             },
@@ -95,10 +103,11 @@ class NetworkBending:
         model_clone = model.clone()
         
         # Set random seed if specified
-        if seed != -1:
-            torch.manual_seed(seed)
-            np.random.seed(seed)
-            random.seed(seed)
+        normalized_seed = _normalize_seed(seed)
+        if normalized_seed is not None:
+            torch.manual_seed(normalized_seed)
+            np.random.seed(normalized_seed)
+            random.seed(normalized_seed)
         
         # Get the actual model from the ComfyUI model wrapper
         if hasattr(model_clone, 'model'):
@@ -177,9 +186,11 @@ class NetworkBending:
                 if abs_param.numel() == 0:
                     continue
                 q = float(max(0.0, min(1.0, intensity)))
-                threshold = torch.quantile(abs_param, q)
-                mask = torch.abs(param.data) > threshold
-                # Convert mask to the same dtype as the parameter
+                abs_param_for_threshold = abs_param
+                if (not abs_param.is_floating_point()) or abs_param.dtype not in (torch.float32, torch.float64):
+                    abs_param_for_threshold = abs_param.to(torch.float32)
+                threshold = torch.quantile(abs_param_for_threshold, q)
+                mask = abs_param_for_threshold > threshold
                 param.data.mul_(mask.to(dtype=param.dtype))
                 modified.append(name)
         return modified
@@ -210,7 +221,7 @@ class NetworkBending:
                         param.data.unsqueeze(0).unsqueeze(0),
                         kernel,
                         padding=1
-                    ).squeeze()
+                    ).squeeze(0).squeeze(0)
                 param.data = param.data * (1 - intensity) + smoothed * intensity
                 modified.append(name)
         return modified
@@ -389,7 +400,7 @@ class InvertedPruning:
                 "seed": ("INT", {
                     "default": -1,
                     "min": -1,
-                    "max": 0xffffffffffffffff,
+                    "max": MAX_SEED,
                     "tooltip": "Random seed for reproducible pruning (-1 for random)"
                 }),
             },
@@ -428,10 +439,11 @@ class InvertedPruning:
         model_clone = model.clone()
         
         # Set random seed
-        if seed != -1:
-            torch.manual_seed(seed)
-            np.random.seed(seed)
-            random.seed(seed)
+        normalized_seed = _normalize_seed(seed)
+        if normalized_seed is not None:
+            torch.manual_seed(normalized_seed)
+            np.random.seed(normalized_seed)
+            random.seed(normalized_seed)
         
         # Get the actual model
         sd_model = model_clone.model if hasattr(model_clone, 'model') else model_clone
@@ -1270,7 +1282,7 @@ class VAENetworkBending:
                 "seed": ("INT", {
                     "default": -1,
                     "min": -1,
-                    "max": 0xffffffffffffffff,
+                    "max": MAX_SEED,
                 }),
             }
         }
@@ -1287,10 +1299,11 @@ class VAENetworkBending:
         vae_clone = copy.deepcopy(vae)
         
         # Set random seed
-        if seed != -1:
-            torch.manual_seed(seed)
-            np.random.seed(seed)
-            random.seed(seed)
+        normalized_seed = _normalize_seed(seed)
+        if normalized_seed is not None:
+            torch.manual_seed(normalized_seed)
+            np.random.seed(normalized_seed)
+            random.seed(normalized_seed)
         
         # Get encoder and decoder
         encoder = vae_clone.encoder if hasattr(vae_clone, 'encoder') else vae_clone.first_stage_model.encoder

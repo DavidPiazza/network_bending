@@ -3,6 +3,7 @@ Audio Latent Space Manipulation Nodes for Stable Audio
 These nodes enable working directly with audio latents for style transfer and hybrid generation
 """
 
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,6 +11,8 @@ import numpy as np
 from typing import Dict, List, Tuple, Any, Optional
 import torchaudio
 import librosa
+
+from ._audio_utils import get_vae_device, unpack_audio_input, unpack_latent, wrap_latent
 
 # Import the additional nodes from the style transfer module
 from .audio_style_transfer import (
@@ -44,14 +47,15 @@ class AudioVAEEncode:
             }
         }
     
-    RETURN_TYPES = ("AUDIO_LATENT", "LATENT_INFO")
+    RETURN_TYPES = ("LATENT", "LATENT_INFO")
     RETURN_NAMES = ("latent", "info")
     FUNCTION = "encode_audio"
     CATEGORY = "audio/latent"
     
     def encode_audio(self, audio, vae, normalize=True, target_sample_rate=44100):
-        # Extract audio tensor and sample rate
-        waveform, sample_rate = audio
+        # Extract audio tensor and sample rate (supports dict and tuple formats)
+        waveform, sample_rate = unpack_audio_input(audio, default_sample_rate=target_sample_rate)
+        waveform = waveform.to(torch.float32)
         
         # Resample if necessary
         if sample_rate != target_sample_rate:
@@ -71,26 +75,31 @@ class AudioVAEEncode:
         # Encode with VAE
         with torch.no_grad():
             # Move to same device as VAE
-            device = next(vae.parameters()).device
+            device = get_vae_device(vae)
             waveform = waveform.to(device)
             
             # Encode
             latent = vae.encode(waveform)
+            latent_tensor, latent_meta = unpack_latent(latent)
             
             # Get latent statistics
-            latent_mean = latent.mean()
-            latent_std = latent.std()
+            latent_mean = latent_tensor.mean()
+            latent_std = latent_tensor.std()
             
         # Create info dictionary
         info = {
             "original_shape": waveform.shape,
-            "latent_shape": latent.shape,
+            "latent_shape": latent_tensor.shape,
             "sample_rate": target_sample_rate,
             "latent_mean": latent_mean.item(),
             "latent_std": latent_std.item(),
         }
         
-        return (latent, info)
+        meta = dict(latent_meta) if latent_meta else {}
+        meta.setdefault("sample_rate", target_sample_rate)
+        meta.setdefault("audio_shape", waveform.shape)
+
+        return (wrap_latent(latent_tensor, meta), info)
 
 class AudioVAEDecode:
     """
@@ -101,7 +110,7 @@ class AudioVAEDecode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "latent": ("AUDIO_LATENT", {"tooltip": "Audio latent to decode"}),
+                "latent": ("LATENT", {"tooltip": "Audio latent to decode"}),
                 "vae": ("VAE", {"tooltip": "Stable Audio VAE model"}),
             },
             "optional": {
@@ -121,11 +130,12 @@ class AudioVAEDecode:
         # Decode with VAE
         with torch.no_grad():
             # Ensure latent is on correct device
-            device = next(vae.parameters()).device
-            latent = latent.to(device)
+            device = get_vae_device(vae)
+            latent_tensor, latent_meta = unpack_latent(latent)
+            latent_tensor = latent_tensor.to(device)
             
             # Decode
-            waveform = vae.decode(latent)
+            waveform = vae.decode(latent_tensor)
             
             # Move to CPU for further processing
             waveform = waveform.cpu()
@@ -136,6 +146,12 @@ class AudioVAEDecode:
         
         # Extract sample rate (default to 44100 if not stored)
         sample_rate = 44100
+        if isinstance(latent_meta, dict):
+            sr = latent_meta.get("sample_rate") or latent_meta.get("audio_sample_rate")
+            if sr is not None:
+                if isinstance(sr, torch.Tensor):
+                    sr = sr.detach().cpu().item()
+                sample_rate = int(sr)
         
         # Return as (waveform, sample_rate) tuple
         return ((waveform, sample_rate),)
@@ -149,8 +165,8 @@ class AudioLatentInterpolate:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "latent_a": ("AUDIO_LATENT", {"tooltip": "First audio latent"}),
-                "latent_b": ("AUDIO_LATENT", {"tooltip": "Second audio latent"}),
+                "latent_a": ("LATENT", {"tooltip": "First audio latent"}),
+                "latent_b": ("LATENT", {"tooltip": "Second audio latent"}),
                 "interpolation_factor": ("FLOAT", {
                     "default": 0.5,
                     "min": 0.0,
@@ -179,16 +195,19 @@ class AudioLatentInterpolate:
             }
         }
     
-    RETURN_TYPES = ("AUDIO_LATENT",)
+    RETURN_TYPES = ("LATENT",)
     RETURN_NAMES = ("latent",)
     FUNCTION = "interpolate_latents"
     CATEGORY = "audio/latent"
     
     def interpolate_latents(self, latent_a, latent_b, interpolation_factor, 
                           interpolation_mode, curve_power=1.0):
+        latent_a_tensor, latent_a_meta = unpack_latent(latent_a)
+        latent_b_tensor, _ = unpack_latent(latent_b)
+
         # Ensure latents are on the same device
-        device = latent_a.device
-        latent_b = latent_b.to(device)
+        device = latent_a_tensor.device
+        latent_b_tensor = latent_b_tensor.to(device)
         
         # Apply curve to interpolation factor if needed
         if curve_power != 1.0:
@@ -196,25 +215,39 @@ class AudioLatentInterpolate:
         
         if interpolation_mode == "linear":
             # Simple linear interpolation
-            result = (1 - interpolation_factor) * latent_a + interpolation_factor * latent_b
+            result = (1 - interpolation_factor) * latent_a_tensor + interpolation_factor * latent_b_tensor
             
         elif interpolation_mode == "spherical":
             # Spherical linear interpolation (SLERP)
-            # Normalize latents
-            latent_a_norm = F.normalize(latent_a.flatten(1), dim=1, eps=1e-6).reshape(latent_a.shape)
-            latent_b_norm = F.normalize(latent_b.flatten(1), dim=1, eps=1e-6).reshape(latent_b.shape)
-            
-            # Compute angle between latents
-            dot_product = (latent_a_norm * latent_b_norm).sum()
-            angle = torch.acos(torch.clamp(dot_product, -1, 1))
-            
-            # SLERP formula
-            if angle < 1e-6:
-                result = (1 - interpolation_factor) * latent_a + interpolation_factor * latent_b
-            else:
-                sin_angle = torch.sin(angle)
-                result = (torch.sin((1 - interpolation_factor) * angle) / sin_angle) * latent_a + \
-                        (torch.sin(interpolation_factor * angle) / sin_angle) * latent_b
+            latent_a_flat = latent_a_tensor.flatten(1)
+            latent_b_flat = latent_b_tensor.flatten(1)
+
+            # Normalize latents per-batch element
+            latent_a_unit = F.normalize(latent_a_flat, dim=1, eps=1e-6)
+            latent_b_unit = F.normalize(latent_b_flat, dim=1, eps=1e-6)
+
+            dot_product = torch.sum(latent_a_unit * latent_b_unit, dim=1, keepdim=True)
+            dot_product = torch.clamp(dot_product, -0.999999, 0.999999)
+            angles = torch.acos(dot_product)
+            sin_angles = torch.sin(angles)
+
+            denom = torch.where(sin_angles.abs() < 1e-6, torch.ones_like(sin_angles), sin_angles)
+            coef_a = torch.sin((1 - interpolation_factor) * angles) / denom
+            coef_b = torch.sin(interpolation_factor * angles) / denom
+
+            result_flat = coef_a * latent_a_flat + coef_b * latent_b_flat
+
+            # For nearly identical latents fall back to linear interpolation
+            near_linear = sin_angles.abs() < 1e-6
+            if near_linear.any():
+                linear = (1 - interpolation_factor) * latent_a_flat + interpolation_factor * latent_b_flat
+                result_flat = torch.where(
+                    near_linear.expand_as(result_flat),
+                    linear,
+                    result_flat
+                )
+
+            result = result_flat.view_as(latent_a_tensor)
                         
         elif interpolation_mode == "cubic":
             # Cubic interpolation (smooth start and end)
@@ -222,14 +255,14 @@ class AudioLatentInterpolate:
             t2 = t * t
             t3 = t2 * t
             factor = 3 * t2 - 2 * t3
-            result = (1 - factor) * latent_a + factor * latent_b
+            result = (1 - factor) * latent_a_tensor + factor * latent_b_tensor
             
         elif interpolation_mode == "sine":
             # Sine-based interpolation
-            factor = 0.5 * (1 + torch.sin(torch.tensor(np.pi * (interpolation_factor - 0.5))))
-            result = (1 - factor) * latent_a + factor * latent_b
-        
-        return (result,)
+            factor = 0.5 * (1 + math.sin(math.pi * (interpolation_factor - 0.5)))
+            result = (1 - factor) * latent_a_tensor + factor * latent_b_tensor
+
+        return (wrap_latent(result, latent_a_meta),)
 
 class AudioLatentBlend:
     """
@@ -240,8 +273,8 @@ class AudioLatentBlend:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "latent_a": ("AUDIO_LATENT", {"tooltip": "First audio latent"}),
-                "latent_b": ("AUDIO_LATENT", {"tooltip": "Second audio latent"}),
+                "latent_a": ("LATENT", {"tooltip": "First audio latent"}),
+                "latent_b": ("LATENT", {"tooltip": "Second audio latent"}),
                 "blend_mode": ([
                     "add",
                     "multiply", 
@@ -263,8 +296,8 @@ class AudioLatentBlend:
                 }),
             },
             "optional": {
-                "latent_c": ("AUDIO_LATENT", {"tooltip": "Optional third audio latent"}),
-                "latent_d": ("AUDIO_LATENT", {"tooltip": "Optional fourth audio latent"}),
+                "latent_c": ("LATENT", {"tooltip": "Optional third audio latent"}),
+                "latent_d": ("LATENT", {"tooltip": "Optional fourth audio latent"}),
                 "weight_a": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0}),
                 "weight_b": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0}),
                 "weight_c": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0}),
@@ -273,7 +306,7 @@ class AudioLatentBlend:
             }
         }
     
-    RETURN_TYPES = ("AUDIO_LATENT",)
+    RETURN_TYPES = ("LATENT",)
     RETURN_NAMES = ("latent",)
     FUNCTION = "blend_latents"
     CATEGORY = "audio/latent"
@@ -282,18 +315,22 @@ class AudioLatentBlend:
                      latent_c=None, latent_d=None,
                      weight_a=1.0, weight_b=1.0, weight_c=1.0, weight_d=1.0,
                      normalize=True):
-        
-        device = latent_a.device
+        latent_a_tensor, latent_a_meta = unpack_latent(latent_a)
+        latent_b_tensor, _ = unpack_latent(latent_b)
+
+        device = latent_a_tensor.device
         
         # Collect all available latents and weights
-        latents = [latent_a, latent_b]
+        latents = [latent_a_tensor.to(device), latent_b_tensor.to(device)]
         weights = [weight_a, weight_b]
         
         if latent_c is not None:
-            latents.append(latent_c.to(device))
+            latent_c_tensor, _ = unpack_latent(latent_c)
+            latents.append(latent_c_tensor.to(device))
             weights.append(weight_c)
         if latent_d is not None:
-            latents.append(latent_d.to(device))
+            latent_d_tensor, _ = unpack_latent(latent_d)
+            latents.append(latent_d_tensor.to(device))
             weights.append(weight_d)
         
         # Normalize weights if requested by the user
@@ -301,6 +338,10 @@ class AudioLatentBlend:
             total_weight = sum(weights)
             if abs(total_weight) > 1e-12:
                 weights = [w / total_weight for w in weights]
+            else:
+                # Fallback to uniform weights when total is zero
+                count = len(weights)
+                weights = [1.0 / count for _ in weights]
         
         # Apply blend mode
         if blend_mode == "add":
@@ -352,8 +393,8 @@ class AudioLatentBlend:
             for i in range(1, len(latents)):
                 excl = result + latents[i] * weights[i] - 2 * result * latents[i] * weights[i]
                 result = result * (1 - blend_factor) + excl * blend_factor
-        
-        return (result,)
+
+        return (wrap_latent(result, latent_a_meta),)
 
 class AudioFeatureExtractor:
     """
@@ -401,13 +442,23 @@ class AudioFeatureExtractor:
     CATEGORY = "audio/analysis"
     
     def extract_features(self, audio, feature_type, n_mfcc=13, hop_length=512):
-        waveform, sample_rate = audio
+        waveform, sample_rate = unpack_audio_input(audio)
+        waveform = waveform.to(torch.float32)
         
         # Convert to numpy for librosa
         if isinstance(waveform, torch.Tensor):
-            waveform_np = waveform.squeeze().cpu().numpy()
+            waveform_np = waveform.detach().cpu().numpy()
         else:
-            waveform_np = waveform
+            waveform_np = np.asarray(waveform)
+
+        # Librosa expects numpy arrays with float dtype
+        waveform_np = np.squeeze(waveform_np)
+        if waveform_np.ndim == 0:
+            waveform_np = waveform_np.reshape(1)
+        if not isinstance(waveform_np, np.ndarray):
+            waveform_np = np.asarray(waveform_np)
+        if not np.issubdtype(waveform_np.dtype, np.floating):
+            waveform_np = waveform_np.astype(np.float32, copy=False)
         
         # Extract features based on type
         if feature_type == "spectral_centroid":
@@ -467,7 +518,7 @@ class AudioLatentManipulator:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "latent": ("AUDIO_LATENT", {"tooltip": "Audio latent to manipulate"}),
+                "latent": ("LATENT", {"tooltip": "Audio latent to manipulate"}),
                 "manipulation_type": ([
                     "frequency_shift",
                     "temporal_stretch",
@@ -505,15 +556,16 @@ class AudioLatentManipulator:
             }
         }
     
-    RETURN_TYPES = ("AUDIO_LATENT",)
+    RETURN_TYPES = ("LATENT",)
     RETURN_NAMES = ("latent",)
     FUNCTION = "manipulate_latent"
     CATEGORY = "audio/latent"
     
     def manipulate_latent(self, latent, manipulation_type, strength, 
                          features=None, frequency=440.0, time_factor=1.0):
-        device = latent.device
-        result = latent.clone()
+        latent_tensor, latent_meta = unpack_latent(latent)
+        device = latent_tensor.device
+        result = latent_tensor.clone()
         
         # Get latent dimensions
         batch, channels, *spatial_dims = result.shape
@@ -523,15 +575,23 @@ class AudioLatentManipulator:
             # Apply FFT-like transformation in latent space
             if len(spatial_dims) == 2:
                 # 2D latent (height, width)
+                height, width = spatial_dims
                 fft_latent = torch.fft.fft2(result)
-                # Shift frequencies
-                shift_amount = int(strength * spatial_dims[1] * frequency / 22050)
-                fft_latent = torch.roll(fft_latent, shifts=shift_amount, dims=-1)
+                shift_time = int(round(strength * width * frequency / 22050))
+                shift_freq = int(round(strength * height * 0.25))
+                if strength > 0:
+                    if shift_time == 0 and width > 1:
+                        shift_time = 1
+                    if shift_freq == 0 and height > 1:
+                        shift_freq = 1
+                fft_latent = torch.roll(fft_latent, shifts=(shift_freq, shift_time), dims=(-2, -1))
                 result = torch.fft.ifft2(fft_latent).real
             else:
                 # 1D latent
                 fft_latent = torch.fft.fft(result)
-                shift_amount = int(strength * spatial_dims[0] * frequency / 22050)
+                shift_amount = int(round(strength * spatial_dims[0] * frequency / 22050))
+                if strength > 0 and shift_amount == 0 and spatial_dims[0] > 1:
+                    shift_amount = 1
                 fft_latent = torch.roll(fft_latent, shifts=shift_amount, dims=-1)
                 result = torch.fft.ifft(fft_latent).real
                 
@@ -567,10 +627,14 @@ class AudioLatentManipulator:
                 kernel_size = 5
                 maxpool = nn.MaxPool1d(kernel_size, stride=1, padding=kernel_size//2)
                 if len(spatial_dims) == 2:
-                    mag_flat = magnitudes.reshape(batch * channels * spatial_dims[0], -1)
-                    peaks = (magnitudes == maxpool(mag_flat).reshape(magnitudes.shape))
+                    height, width = spatial_dims
+                    mag_flat = magnitudes.reshape(batch * channels * height, 1, width)
+                    pooled = maxpool(mag_flat)
+                    pooled = pooled.reshape(batch, channels, height, width)
+                    peaks = magnitudes == pooled
                 else:
-                    peaks = (magnitudes == maxpool(magnitudes))
+                    pooled = maxpool(magnitudes)
+                    peaks = magnitudes == pooled
                 
                 # Emphasize peaks
                 fft_latent = fft_latent * (1 + strength * peaks.float())
@@ -606,28 +670,58 @@ class AudioLatentManipulator:
                                    
         elif manipulation_type == "spatial_transform":
             # Transform spatial relationships in latent
-            if len(spatial_dims) == 2:
+            if len(spatial_dims) == 1:
+                length = spatial_dims[0]
+                if length > 1:
+                    base = result.clone()
+                    coords = torch.linspace(-1, 1, length, device=device, dtype=result.dtype)
+                    displacement = torch.sin(coords * math.pi * 2) * (float(strength) * 0.3)
+                    warped_coords = (coords + displacement).clamp(-1.0, 1.0)
+                    grid = torch.zeros((batch, 1, length, 2), device=device, dtype=result.dtype)
+                    grid[..., 0] = warped_coords
+                    grid[..., 1] = 0.0
+                    warped = torch.nn.functional.grid_sample(
+                        result.unsqueeze(2),
+                        grid,
+                        mode="bilinear",
+                        padding_mode="border",
+                        align_corners=False,
+                    ).squeeze(2)
+                    mix = max(0.0, min(float(strength), 1.0))
+                    result = torch.lerp(base, warped, mix)
+            elif len(spatial_dims) == 2:
                 # Rotate latent space
-                angle = strength * np.pi
-                cos_a = torch.cos(torch.tensor(angle))
-                sin_a = torch.sin(torch.tensor(angle))
+                angle = float(strength) * math.pi
+                cos_a = math.cos(angle)
+                sin_a = math.sin(angle)
                 
                 # Create rotation matrix
-                rot_matrix = torch.tensor([[cos_a, -sin_a], [sin_a, cos_a]], device=device)
+                rot_matrix = torch.tensor(
+                    [[cos_a, -sin_a], [sin_a, cos_a]],
+                    dtype=result.dtype,
+                    device=device,
+                )
                 
                 # Apply rotation (simplified - works on channel pairs)
                 if channels >= 2:
+                    base = result.clone()
+                    mix = max(0.0, min(float(strength), 1.0))
                     for i in range(0, channels-1, 2):
                         pair = result[:, i:i+2].reshape(batch, 2, -1)
                         rotated = torch.matmul(rot_matrix, pair)
-                        result[:, i:i+2] = rotated.reshape(batch, 2, *spatial_dims)
+                        blended = torch.lerp(
+                            base[:, i:i+2].reshape(batch, 2, -1),
+                            rotated,
+                            mix,
+                        ).reshape(batch, 2, *spatial_dims)
+                        result[:, i:i+2] = blended
                         
         elif manipulation_type == "resonance_filter":
             # Apply resonant filtering in latent space
             if len(spatial_dims) >= 1:
                 # Create resonance kernel
                 center_freq = frequency / 22050  # Normalize frequency
-                bandwidth = 0.1 * strength
+                bandwidth = max(0.1 * float(strength), 1e-3)
                 
                 freqs = torch.linspace(0, 1, spatial_dims[-1], device=device)
                 resonance = torch.exp(-((freqs - center_freq) ** 2) / (2 * bandwidth ** 2))
@@ -636,5 +730,5 @@ class AudioLatentManipulator:
                 fft_latent = torch.fft.fft(result, dim=-1)
                 fft_latent = fft_latent * resonance
                 result = torch.fft.ifft(fft_latent, dim=-1).real
-        
-        return (result,)
+
+        return (wrap_latent(result, latent_meta),)

@@ -8,6 +8,8 @@ import torch.nn.functional as F
 import numpy as np
 from typing import Dict, List, Tuple, Any, Optional
 
+from ._audio_utils import get_vae_device, unpack_audio_input, unpack_latent, wrap_latent
+
 class AudioStyleTransfer:
     """
     Transfer style characteristics from one audio to another in latent space
@@ -17,8 +19,8 @@ class AudioStyleTransfer:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "content_latent": ("AUDIO_LATENT", {"tooltip": "Content audio latent"}),
-                "style_latent": ("AUDIO_LATENT", {"tooltip": "Style audio latent"}),
+                "content_latent": ("LATENT", {"tooltip": "Content audio latent"}),
+                "style_latent": ("LATENT", {"tooltip": "Style audio latent"}),
                 "transfer_mode": ([
                     "global",
                     "frequency_bands",
@@ -50,42 +52,58 @@ class AudioStyleTransfer:
                     "max": 16,
                     "tooltip": "Number of frequency bands for band-wise transfer"
                 }),
+                "time_alignment": ([
+                    "crop_to_shortest",
+                    "pad_to_longest",
+                    "none",
+                ], {
+                    "default": "crop_to_shortest",
+                    "tooltip": "Make content/style latents the same temporal length"
+                }),
             }
         }
     
-    RETURN_TYPES = ("AUDIO_LATENT",)
+    RETURN_TYPES = ("LATENT",)
     RETURN_NAMES = ("latent",)
     FUNCTION = "transfer_style"
     CATEGORY = "audio/style"
     
     def transfer_style(self, content_latent, style_latent, transfer_mode, 
-                      style_strength, preserve_content=0.3, frequency_bands=4):
-        device = content_latent.device
-        style_latent = style_latent.to(device)
+                      style_strength, preserve_content=0.3, frequency_bands=4,
+                      time_alignment="crop_to_shortest"):
+        content_latent_tensor, content_meta = unpack_latent(content_latent)
+        style_latent_tensor, _ = unpack_latent(style_latent)
+
+        device = content_latent_tensor.device
+        style_latent_tensor = style_latent_tensor.to(device)
+
+        content_latent_tensor, style_latent_tensor = self._align_time(
+            content_latent_tensor, style_latent_tensor, time_alignment
+        )
         
         if transfer_mode == "global":
             # Global style transfer using statistics matching
             # Compute statistics
-            content_mean = content_latent.mean(dim=(2, 3), keepdim=True) if content_latent.dim() == 4 else content_latent.mean(dim=2, keepdim=True)
-            content_std = content_latent.std(dim=(2, 3), keepdim=True) if content_latent.dim() == 4 else content_latent.std(dim=2, keepdim=True)
+            content_mean = content_latent_tensor.mean(dim=(2, 3), keepdim=True) if content_latent_tensor.dim() == 4 else content_latent_tensor.mean(dim=2, keepdim=True)
+            content_std = content_latent_tensor.std(dim=(2, 3), keepdim=True) if content_latent_tensor.dim() == 4 else content_latent_tensor.std(dim=2, keepdim=True)
             
-            style_mean = style_latent.mean(dim=(2, 3), keepdim=True) if style_latent.dim() == 4 else style_latent.mean(dim=2, keepdim=True)
-            style_std = style_latent.std(dim=(2, 3), keepdim=True) if style_latent.dim() == 4 else style_latent.std(dim=2, keepdim=True)
+            style_mean = style_latent_tensor.mean(dim=(2, 3), keepdim=True) if style_latent_tensor.dim() == 4 else style_latent_tensor.mean(dim=2, keepdim=True)
+            style_std = style_latent_tensor.std(dim=(2, 3), keepdim=True) if style_latent_tensor.dim() == 4 else style_latent_tensor.std(dim=2, keepdim=True)
             
             # Normalize content and apply style statistics
-            normalized = (content_latent - content_mean) / (content_std + 1e-6)
+            normalized = (content_latent_tensor - content_mean) / (content_std + 1e-6)
             stylized = normalized * style_std + style_mean
             
             # Blend with original
-            result = stylized * style_strength + content_latent * preserve_content
+            result = stylized * style_strength + content_latent_tensor * preserve_content
             
         elif transfer_mode == "frequency_bands":
             # Transfer style in different frequency bands
-            result = content_latent.clone()
+            result = content_latent_tensor.clone()
             
             # Apply FFT
-            fft_content = torch.fft.fft(content_latent, dim=-1)
-            fft_style = torch.fft.fft(style_latent, dim=-1)
+            fft_content = torch.fft.fft(content_latent_tensor, dim=-1)
+            fft_style = torch.fft.fft(style_latent_tensor, dim=-1)
             
             # Split into frequency bands
             freq_size = fft_content.shape[-1]
@@ -111,18 +129,18 @@ class AudioStyleTransfer:
             
         elif transfer_mode == "temporal_segments":
             # Transfer style in temporal segments
-            time_dim = content_latent.shape[-1]
+            time_dim = content_latent_tensor.shape[-1]
             segment_size = time_dim // 4  # 4 segments
             
-            result = content_latent.clone()
+            result = content_latent_tensor.clone()
             
             for i in range(4):
                 start_idx = i * segment_size
                 end_idx = (i + 1) * segment_size if i < 3 else time_dim
                 
                 # Get segments
-                content_seg = content_latent[..., start_idx:end_idx]
-                style_seg = style_latent[..., start_idx:end_idx]
+                content_seg = content_latent_tensor[..., start_idx:end_idx]
+                style_seg = style_latent_tensor[..., start_idx:end_idx]
                 
                 # Transfer style in segment
                 seg_mean_c = content_seg.mean()
@@ -138,8 +156,8 @@ class AudioStyleTransfer:
         elif transfer_mode == "adaptive":
             # Adaptive style transfer using correlation
             # Flatten spatial dimensions
-            content_flat = content_latent.reshape(content_latent.shape[0], content_latent.shape[1], -1)
-            style_flat = style_latent.reshape(style_latent.shape[0], style_latent.shape[1], -1)
+            content_flat = content_latent_tensor.reshape(content_latent_tensor.shape[0], content_latent_tensor.shape[1], -1)
+            style_flat = style_latent_tensor.reshape(style_latent_tensor.shape[0], style_latent_tensor.shape[1], -1)
             
             # Compute correlation matrix
             content_cov = torch.matmul(content_flat, content_flat.transpose(1, 2))
@@ -162,20 +180,20 @@ class AudioStyleTransfer:
             stylized = torch.matmul(coloring, whitened)
             
             # Reshape back
-            stylized = stylized.reshape(content_latent.shape)
-            result = stylized * style_strength + content_latent * preserve_content
+            stylized = stylized.reshape(content_latent_tensor.shape)
+            result = stylized * style_strength + content_latent_tensor * preserve_content
             
         elif transfer_mode == "neural_style":
             # Neural style transfer inspired approach
             # Use convolutional layers to extract features
-            conv1 = nn.Conv1d(content_latent.shape[1], 64, 3, padding=1).to(device)
+            conv1 = nn.Conv1d(content_latent_tensor.shape[1], 64, 3, padding=1).to(device)
             conv2 = nn.Conv1d(64, 32, 3, padding=1).to(device)
             
             # Extract features
-            content_feat1 = F.relu(conv1(content_latent.squeeze(2) if content_latent.dim() == 4 else content_latent))
+            content_feat1 = F.relu(conv1(content_latent_tensor.squeeze(2) if content_latent_tensor.dim() == 4 else content_latent_tensor))
             content_feat2 = F.relu(conv2(content_feat1))
             
-            style_feat1 = F.relu(conv1(style_latent.squeeze(2) if style_latent.dim() == 4 else style_latent))
+            style_feat1 = F.relu(conv1(style_latent_tensor.squeeze(2) if style_latent_tensor.dim() == 4 else style_latent_tensor))
             style_feat2 = F.relu(conv2(style_feat1))
             
             # Compute Gram matrices
@@ -192,9 +210,35 @@ class AudioStyleTransfer:
             target_gram = style_gram * style_strength + content_gram * preserve_content
             
             # Approximate reconstruction (simplified)
-            result = content_latent + 0.1 * (target_gram.mean() - content_gram.mean())
+            result = content_latent_tensor + 0.1 * (target_gram.mean() - content_gram.mean())
         
-        return (result,)
+        return (wrap_latent(result, content_meta),)
+
+    @staticmethod
+    def _align_time(content: torch.Tensor, style: torch.Tensor, mode: str):
+        """Align temporal dimension so both tensors match for ops below."""
+        if mode == "none":
+            return content, style
+
+        content_t = content.shape[-1]
+        style_t = style.shape[-1]
+
+        if content_t == style_t:
+            return content, style
+
+        if mode == "crop_to_shortest":
+            target = min(content_t, style_t)
+            return content[..., :target], style[..., :target]
+
+        if mode == "pad_to_longest":
+            target = max(content_t, style_t)
+            if content_t < target:
+                content = F.pad(content, (0, target - content_t))
+            if style_t < target:
+                style = F.pad(style, (0, target - style_t))
+            return content, style
+
+        return content, style
 
 class AudioLatentGuidance:
     """
@@ -206,7 +250,7 @@ class AudioLatentGuidance:
         return {
             "required": {
                 "model": ("MODEL", {"tooltip": "Stable Audio diffusion model"}),
-                "reference_latent": ("AUDIO_LATENT", {"tooltip": "Reference audio latent for guidance"}),
+                "reference_latent": ("LATENT", {"tooltip": "Reference audio latent for guidance"}),
                 "guidance_strength": ("FLOAT", {
                     "default": 0.5,
                     "min": 0.0,
@@ -250,10 +294,11 @@ class AudioLatentGuidance:
                       start_at_step=0, end_at_step=1000, features=None):
         # Clone the model to avoid modifying the original
         guided_model = model.clone()
+        reference_tensor, _ = unpack_latent(reference_latent)
         
         # Store guidance parameters in the model
         guided_model.audio_latent_guidance = {
-            "reference_latent": reference_latent,
+            "reference_latent": reference_tensor,
             "strength": guidance_strength,
             "mode": guidance_mode,
             "start_step": start_at_step,
@@ -351,7 +396,7 @@ class AudioReferenceEncoder:
             }
         }
     
-    RETURN_TYPES = ("AUDIO_LATENT", "LATENT_INFO")
+    RETURN_TYPES = ("LATENT", "LATENT_INFO")
     RETURN_NAMES = ("combined_latent", "info")
     FUNCTION = "encode_references"
     CATEGORY = "audio/reference"
@@ -361,7 +406,7 @@ class AudioReferenceEncoder:
                          weight_a=1.0, weight_b=1.0, weight_c=1.0, weight_d=1.0,
                          extract_segments=False, segment_duration=2.0):
         
-        device = next(vae.parameters()).device
+        device = get_vae_device(vae)
         
         # Collect all available audio inputs
         audios = [audio_a]
@@ -379,13 +424,18 @@ class AudioReferenceEncoder:
         
         # Normalize weights
         total_weight = sum(weights)
-        weights = [w / total_weight for w in weights]
+        if abs(total_weight) > 1e-12:
+            weights = [w / total_weight for w in weights]
+        else:
+            # Avoid division by zero; fall back to uniform weights
+            weights = [1.0 / len(weights) for _ in weights]
         
         # Encode all audio inputs
         encoded_latents = []
         
         for audio, weight in zip(audios, weights):
-            waveform, sample_rate = audio
+            waveform, sample_rate = unpack_audio_input(audio)
+            waveform = waveform.to(torch.float32)
             
             # Extract characteristic segment if requested
             if extract_segments:
@@ -404,7 +454,9 @@ class AudioReferenceEncoder:
                     waveform = waveform[..., best_idx:best_idx+segment_samples]
             
             # Normalize audio
-            waveform = waveform / torch.max(torch.abs(waveform))
+            max_abs = torch.max(torch.abs(waveform))
+            if float(max_abs) > 1e-12:
+                waveform = waveform / max_abs
             
             # Ensure correct shape
             if waveform.dim() == 2:
@@ -414,7 +466,8 @@ class AudioReferenceEncoder:
             with torch.no_grad():
                 waveform = waveform.to(device)
                 latent = vae.encode(waveform)
-                encoded_latents.append((latent, weight))
+                latent_tensor, _ = unpack_latent(latent)
+                encoded_latents.append((latent_tensor, weight))
         
         # Combine latents based on mode
         if combination_mode == "average":
@@ -482,4 +535,4 @@ class AudioReferenceEncoder:
             "extracted_segments": extract_segments
         }
         
-        return (combined, info)
+        return (wrap_latent(combined), info)
